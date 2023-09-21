@@ -170,7 +170,7 @@ async function transcribeLargeAudioFile(audioFileName: string) {
  * @returns {string} - The modified directory name with illegal characters replaced by hyphens.
  */
 function removeIllegalCharactersForDirName(directoryName: string): string {
-    return directoryName.replace(/[\\/:*?"<>|&%$@{}']/g, '-')
+    return directoryName.replace(/[\\/:*?"<>|&%$@{}']/g, '')
 }
 
 /**
@@ -182,7 +182,7 @@ async function downloadAudioFromYouTube(youtubeLink: string) {
     // Get audio details from YouTube
     const videoInfo = await ytdl.getInfo(youtubeLink)
     const videoTitle = videoInfo.videoDetails.title
-    const outputDirectory = removeIllegalCharactersForDirName(`processed/${videoTitle}`)
+    const outputDirectory = `processed/${removeIllegalCharactersForDirName(videoTitle)}`
     try { fs.mkdirSync(outputDirectory) } catch {}
     const audioFormat = ytdl.chooseFormat(videoInfo.formats, { filter: 'audioonly' })
 
