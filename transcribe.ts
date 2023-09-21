@@ -37,7 +37,11 @@ parser.add_argument('--gpt-model', {
 })
 const args = parser.parse_args()
 
-/** Split an audio file into smaller chunks */
+/**
+ * Splits an audio file into smaller chunks using FFmpeg.
+ * @param {string} audioFileName - The name of the input audio file to be split.
+ * @returns {void}
+ */
 function splitAudioFile(audioFileName: string) {
     try {
         const command = `ffmpeg -i "${audioFileName}" -f segment -segment_time 200 -c:a libmp3lame out%03d.mp3`
@@ -47,7 +51,10 @@ function splitAudioFile(audioFileName: string) {
     }
 }
 
-/** Clean up chunked audio files created during transcript generation */
+/**
+ * Cleans up chunked audio files created during transcript generation.
+ * @returns {void}
+ */
 function cleanupAudioChunks() {
     let i = 0
     let fileName = `out${String(i).padStart(3, '0')}.mp3`
@@ -58,7 +65,11 @@ function cleanupAudioChunks() {
     }
 }
 
-/** Transcribe small audio file using OpenAI's whisper */
+/**
+ * Transcribes a small audio file using OpenAI's Whisper ASR service.
+ * @param {string} audioFileName - The name of the input audio file to be transcribed.
+ * @returns {Promise<string | undefined>} - A promise that resolves to the transcription text or undefined in case of an error.
+ */
 async function transcribeSmallAudioFile(audioFileName: string): Promise<string | undefined> {
     try {
         // @ts-ignore Can't figure out where the File object is supposed to come from
@@ -70,13 +81,25 @@ async function transcribeSmallAudioFile(audioFileName: string): Promise<string |
     }
 }
 
+/**
+ * Splits a string into lines of a specified maximum length.
+ * @param {string} inputString - The input string to be split into lines.
+ * @param {number} lineLength - The maximum length of each line.
+ * @returns {string} - The input string split into lines.
+ */
 function splitStringIntoLines(inputString: string, lineLength: number): string {
     const regex = new RegExp(`.{1,${lineLength}}`, 'g')
     const lines = inputString.match(regex)
     return lines.join('\n')
 }
 
-/** The main function to process files and aggregate transcriptions */
+/**
+ * Process a large audio file by splitting it into chunks, transcribing each chunk,
+ * and aggregating the transcriptions into a single file. Optionally, it can also
+ * generate a summary of the transcriptions.
+ * @param {string} audioFileName - The name of the input audio file to be transcribed.
+ * @returns {void}
+ */
 async function transcribeLargeAudioFile(audioFileName: string) {
     // Split the audio file into smaller chunks as needed
     splitAudioFile(audioFileName)
@@ -141,13 +164,26 @@ async function transcribeLargeAudioFile(audioFileName: string) {
     }
 }
 
-/** Function to download audio from YouTube */
+/**
+ * Removes illegal characters from a directory name.
+ * @param {string} directoryName - The input directory name with potential illegal characters.
+ * @returns {string} - The modified directory name with illegal characters replaced by hyphens.
+ */
+function removeIllegalCharactersForDirName(directoryName: string): string {
+    return directoryName.replace(/[\\/:*?"<>|&%$@{}']/g, '-')
+}
+
+/**
+ * Downloads audio from a YouTube video and processes it.
+ * @param {string} youtubeLink - The YouTube video URL to download audio from.
+ * @returns {void}
+ */
 async function downloadAudioFromYouTube(youtubeLink: string) {
     // Get audio details from YouTube
     const videoInfo = await ytdl.getInfo(youtubeLink)
     const videoTitle = videoInfo.videoDetails.title
-    const outputFileName = `processed/${videoTitle}/audio.mp3`
-    try { fs.mkdirSync(`processed/${videoTitle}`) } catch {}
+    const outputDirectory = removeIllegalCharactersForDirName(`processed/${videoTitle}`)
+    try { fs.mkdirSync(outputDirectory) } catch {}
     const audioFormat = ytdl.chooseFormat(videoInfo.formats, { filter: 'audioonly' })
 
     // Confirm that there is a defined audio format fom YouTube
@@ -157,6 +193,7 @@ async function downloadAudioFromYouTube(youtubeLink: string) {
     }
 
     // Download audio from YouTube into output file
+    const outputFileName = `${outputDirectory}/audio.mp3`
     ytdl(youtubeLink, { format: audioFormat })
         .pipe(fs.createWriteStream(outputFileName))
         .on('finish', () => {
