@@ -70,6 +70,7 @@ async function transcribeLargeAudioFile(audioFileName: string) {
     let aggregatedTranscription = ''
     let i = 0
     let fileName = `out${String(i).padStart(3, '0')}.mp3`
+    console.log('\n')
     while (fs.existsSync(fileName)) {
         console.log(`Processing file: ${fileName}`)
         const transcription = await transcribeSmallAudioFile(fileName)
@@ -94,9 +95,9 @@ async function transcribeLargeAudioFile(audioFileName: string) {
     }
 
     // Save transcription to file
-    const outputFile = audioFileName.replace('.mp3', '.txt')
-    fs.writeFileSync(outputFile, aggregatedTranscription, 'utf8')
-    console.log(`All transcriptions aggregated and saved to ${outputFile}.`)
+    const transcriptFileName = `${audioFileName.replace('.mp3', '')}_transcript.txt`
+    fs.writeFileSync(transcriptFileName, aggregatedTranscription, 'utf8')
+    console.log(`\nAll transcriptions aggregated and saved to ${transcriptFileName}.`)
 
     // Attempt to summarize if requested
     if (args.summarize) {
@@ -110,7 +111,9 @@ async function transcribeLargeAudioFile(audioFileName: string) {
                 }
             ]
         })
-        console.log(response.data.choices[0].message.content)
+        const summaryFileName = `${audioFileName.replace('.mp3', '')}_summary.txt`
+        fs.writeFileSync(summaryFileName, response.data.choices[0].message.content)
+        console.log(`\nSummary saved to ${summaryFileName}`)
     }
 }
 
