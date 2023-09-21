@@ -4,6 +4,7 @@ dotenv.config()
 import { ArgumentParser } from 'argparse'
 import { execSync } from 'child_process'
 import fs from 'fs'
+import { getChatModelFromString } from './local_types'
 import { Configuration, OpenAIApi } from 'openai'
 import ytdl from 'ytdl-core'
 
@@ -26,12 +27,20 @@ parser.add_argument('--summarize', {
     const: true,
     help: 'Whether to summarize the audio transcript or not (default: true)'
 })
+parser.add_argument('--gpt-model', {
+    type: 'str',
+    default: 'gpt3_5',
+    nargs: '?',
+    choices: ['gpt3_5', 'gpt4'],
+    const: true,
+    help: 'Which OpenAI model to use to summarize the transcript (default: gpt3_5)'
+})
 const args = parser.parse_args()
 
 /** Split an audio file into smaller chunks */
 function splitAudioFile(audioFileName: string) {
     try {
-        const command = `ffmpeg -i ${audioFileName} -f segment -segment_time 200 -c:a libmp3lame out%03d.mp3`
+        const command = `ffmpeg -i "${audioFileName}" -f segment -segment_time 200 -c:a libmp3lame out%03d.mp3`
         execSync(command, { stdio: 'inherit' })
     } catch (error: any) {
         console.error(`Error splitting audio: ${error.stderr ? error.stderr.toString() : error.message}`)
@@ -50,15 +59,21 @@ function cleanupAudioChunks() {
 }
 
 /** Transcribe small audio file using OpenAI's whisper */
-async function transcribeSmallAudioFile(audioFileName: string) {
+async function transcribeSmallAudioFile(audioFileName: string): Promise<string | undefined> {
     try {
         // @ts-ignore Can't figure out where the File object is supposed to come from
         const resp = await openai.createTranscription(fs.createReadStream(audioFileName), 'whisper-1')
         return resp.data.text // Adjust based on actual response structure
     } catch (error: any) {
         console.error(`Error transcribing: ${error.message}`)
-        return null
+        return undefined
     }
+}
+
+function splitStringIntoLines(inputString: string, lineLength: number): string {
+    const regex = new RegExp(`.{1,${lineLength}}`, 'g')
+    const lines = inputString.match(regex)
+    return lines.join('\n')
 }
 
 /** The main function to process files and aggregate transcriptions */
@@ -72,17 +87,18 @@ async function transcribeLargeAudioFile(audioFileName: string) {
     let fileName = `out${String(i).padStart(3, '0')}.mp3`
     console.log('\n')
     while (fs.existsSync(fileName)) {
-        console.log(`Processing file: ${fileName}`)
+        console.log(`Processing file: "${fileName}"`)
         const transcription = await transcribeSmallAudioFile(fileName)
-        fileName = `out${String(++i).padStart(3, '0')}.mp3`
 
         if (transcription === undefined) {
-            console.error(`Failed to transcribe ${fileName}.`)
+            console.error(`Failed to transcribe "${fileName}"`)
             continue
         }
 
         aggregatedTranscription += transcription + '\n\n'
-        console.log(`Transcription for ${fileName} added.`)
+        console.log(`Transcription for "${fileName}" added`)
+
+        fileName = `out${String(++i).padStart(3, '0')}.mp3`
     }
 
     // Delete the chunks after processing
@@ -90,19 +106,23 @@ async function transcribeLargeAudioFile(audioFileName: string) {
 
     // Ensure that transcript is not empty
     if (aggregatedTranscription === '') {
-        console.error('No transcriptions were processed.')
+        console.error('No transcriptions were processed')
         return
     }
 
     // Save transcription to file
     const transcriptFileName = `${audioFileName.replace('.mp3', '')}_transcript.txt`
-    fs.writeFileSync(transcriptFileName, aggregatedTranscription, 'utf8')
-    console.log(`\nAll transcriptions aggregated and saved to ${transcriptFileName}.`)
+    fs.writeFileSync(
+        transcriptFileName,
+        splitStringIntoLines(aggregatedTranscription, 80),
+        'utf-8'
+    )
+    console.log(`\nAll transcriptions aggregated and saved to "${transcriptFileName}"`)
 
     // Attempt to summarize if requested
     if (args.summarize) {
         const response = await openai.createChatCompletion({
-            model: 'gpt-3.5-turbo',
+            model: getChatModelFromString(args.gpt_model),
             messages: [
                 {
                     role: 'user',
@@ -112,8 +132,12 @@ async function transcribeLargeAudioFile(audioFileName: string) {
             ]
         })
         const summaryFileName = `${audioFileName.replace('.mp3', '')}_summary.txt`
-        fs.writeFileSync(summaryFileName, response.data.choices[0].message.content)
-        console.log(`\nSummary saved to ${summaryFileName}`)
+        fs.writeFileSync(
+            summaryFileName,
+            splitStringIntoLines(response.data.choices[0].message.content, 80),
+            'utf-8'
+        )
+        console.log(`\nSummary saved to "${summaryFileName}"`)
     }
 }
 
@@ -121,15 +145,14 @@ async function transcribeLargeAudioFile(audioFileName: string) {
 async function downloadAudioFromYouTube(youtubeLink: string) {
     // Get audio details from YouTube
     const videoInfo = await ytdl.getInfo(youtubeLink)
+    const videoTitle = videoInfo.videoDetails.title
+    const outputFileName = `processed/${videoTitle}/audio.mp3`
+    try { fs.mkdirSync(`processed/${videoTitle}`) } catch {}
     const audioFormat = ytdl.chooseFormat(videoInfo.formats, { filter: 'audioonly' })
-
-    // Extract the video code from the YouTube link
-    const videoCode = new URL(youtubeLink).searchParams.get('v')
-    const outputFileName = `${videoCode}.mp3`
 
     // Confirm that there is a defined audio format fom YouTube
     if (audioFormat === undefined) {
-        console.error(`Couldn't find an audio-only format for ${videoCode}`)
+        console.error(`Couldn't find an audio-only format for "${videoTitle}"`)
         return
     }
 
@@ -137,7 +160,7 @@ async function downloadAudioFromYouTube(youtubeLink: string) {
     ytdl(youtubeLink, { format: audioFormat })
         .pipe(fs.createWriteStream(outputFileName))
         .on('finish', () => {
-            console.log(`Audio downloaded and saved as ${outputFileName}`)
+            console.log(`Audio downloaded and saved as "${outputFileName}"`)
             transcribeLargeAudioFile(outputFileName) // Process the downloaded audio
         })
 }
@@ -151,7 +174,7 @@ async function main() {
         } else if (fileNameOrUrl.endsWith('.mp3')) {
             transcribeLargeAudioFile(fileNameOrUrl)
         } else {
-            console.error('Invalid input. Please provide an mp3 file.')
+            console.error('Invalid input. Please provide a YouTube link or an mp3 file.')
         }
     }
 }

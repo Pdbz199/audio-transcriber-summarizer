@@ -2,3 +2,6 @@ node_modules/
 .env
 *.mp3
 *.txt
+# Ignore everything inside 'processed' except for the folder itself and .gitkeep
+processed/*
+!processed/.gitkeep
