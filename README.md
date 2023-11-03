@@ -59,5 +59,5 @@ Optional arguments:
 Transcribe a YouTube video and summarize the content:
 
 ```
-npm run transcribe -- https://www.youtube.com/watch?v=examplevideo --summarize=true --gpt-model=gpt3_5
+npx ts-node transcribe https://www.youtube.com/watch?v=5mFpVDpKX70 --summarize=true --gpt-model=gpt3_5
 ```
