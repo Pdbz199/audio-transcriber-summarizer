@@ -1,3 +1,11 @@
+/**
+ * Collaboration Credit
+ *
+ * This code was written in collaboration with Arvin Zadeh.
+ * He is responsible for the audio processing.
+ * I added summary and environment variable support.
+ */
+
 import dotenv from 'dotenv'
 dotenv.config()
 
